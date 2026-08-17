@@ -33,7 +33,7 @@
 </head>
 <body class="pb-24">
 
-  <!-- GLOBAL LOADING OVERLAY (DÙNG CHO TẤT CẢ TÁC VỤ XỬ LÝ) -->
+  <!-- GLOBAL LOADING OVERLAY -->
   <div id="globalLoading" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[100] hidden flex flex-col items-center justify-center text-white space-y-4">
     <div class="w-14 h-14 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
     <p id="loadingText" class="font-bold text-sm text-slate-200 tracking-wide text-center px-4">
@@ -121,15 +121,41 @@
       </div>
 
       <div id="uploadPreviewContainer" class="hidden space-y-3">
-        <img id="imgPreview" class="w-full h-36 object-cover rounded-xl border" src="" alt="Preview">
+        <!-- Ảnh hiển thị đầy đủ (contain) -->
+        <div class="w-full h-48 bg-slate-900 rounded-xl overflow-hidden flex items-center justify-center border border-slate-700">
+          <img id="imgPreview" class="w-full h-full object-contain" src="" alt="Preview">
+        </div>
         
-        <div class="space-y-2 text-xs">
+        <div class="space-y-2.5 text-xs">
           <div>
             <label class="block text-slate-500 mb-1 font-semibold">Mã Voucher:</label>
             <input type="text" id="inputCode" placeholder="Mã tự quét hoặc nhập tay..." class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
+
+          <!-- Nhà cung cấp -->
           <div>
-            <label class="block text-slate-500 mb-1 font-semibold">Ngày hết hạn (Mặc định +1 tháng):</label>
+            <label class="block text-slate-500 mb-1 font-semibold">Nhà cung cấp:</label>
+            <select id="inputProvider" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+              <option value="UrBox">UrBox</option>
+              <option value="Got It">Got It</option>
+            </select>
+          </div>
+
+          <!-- Mệnh giá -->
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">Mệnh giá (VNĐ):</label>
+            <select id="inputAmountSelect" onchange="toggleCustomAmountInput()" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+              <option value="50000">50,000 đ</option>
+              <option value="100000">100,000 đ</option>
+              <option value="200000">200,000 đ</option>
+              <option value="20000">20,000 đ</option>
+              <option value="custom">-- Nhập mệnh giá khác --</option>
+            </select>
+            <input type="number" id="inputAmountCustom" placeholder="Nhập số tiền..." class="w-full mt-2 px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none hidden">
+          </div>
+
+          <div>
+            <label class="block text-slate-500 mb-1 font-semibold">Ngày hết hạn (Mặc định +3 tháng):</label>
             <input type="date" id="inputExpDate" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
         </div>
@@ -154,20 +180,23 @@
       </button>
     </div>
 
-    <!-- CONTAINER HIỂN THỊ CÓ NÚT SANG TRÁI / PHẢI -->
+    <!-- CONTAINER HIỂN THỊ -->
     <div class="my-auto py-2 w-full flex items-center justify-between space-x-1">
-      
-      <!-- NÚT SANG TRÁI -->
       <button id="btnSessionPrev" onclick="sessionPrev()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
         <i class="fa-solid fa-chevron-left"></i>
       </button>
 
-      <!-- NỘI DUNG VOUCHER -->
-      <div id="sessionCard" class="overflow-y-auto max-h-[70vh] w-full flex flex-col items-center">
+      <div id="sessionCard" class="overflow-y-auto max-h-[75vh] w-full flex flex-col items-center">
         <div class="bg-white text-slate-800 rounded-3xl p-3 shadow-2xl space-y-3 w-full max-w-sm">
           
-          <!-- KHUNG CHỨA ẢNH TỰ ĐỘNG ZOOM TẬP TRUNG VÀO BARCODE / QR CODE -->
-          <div class="relative bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border h-[320px] w-full cursor-pointer select-none" onclick="toggleZoomImage()">
+          <!-- HIỂN THỊ NHÀ CUNG CẤP & MỆNH GIÁ -->
+          <div class="flex justify-between items-center px-1">
+            <span id="sessionProviderTag" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">--</span>
+            <span id="sessionAmountTag" class="text-xs font-extrabold text-emerald-600">-- đ</span>
+          </div>
+
+          <!-- KHUNG CHỨA ẢNH TỰ ĐỘNG ZOOM -->
+          <div class="relative bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border h-[300px] w-full cursor-pointer select-none" onclick="toggleZoomImage()">
             <img id="sessionImg" class="w-full h-full object-contain transition-transform duration-500 ease-out" src="" alt="Voucher">
             
             <span id="zoomHint" class="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded-full pointer-events-none border border-white/20 flex items-center gap-1">
@@ -175,20 +204,19 @@
             </span>
           </div>
           
-          <div class="bg-slate-50 p-3 rounded-xl text-center border border-slate-100">
+          <div class="bg-slate-50 p-2.5 rounded-xl text-center border border-slate-100">
             <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Mã Quét / Thu Ngân</p>
             <div id="sessionCodeDisplay" class="font-mono text-xl font-black text-indigo-600 tracking-wider break-all select-all">
             </div>
           </div>
 
-          <div class="flex justify-between items-center text-xs text-slate-500 px-1 pt-1">
+          <div class="flex justify-between items-center text-xs text-slate-500 px-1 pt-0.5">
             <span>Hạn dùng:</span>
             <span id="sessionExpDate" class="font-bold text-red-500">--/--/----</span>
           </div>
         </div>
       </div>
 
-      <!-- NÚT SANG PHẢI -->
       <button id="btnSessionNext" onclick="sessionNext()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
         <i class="fa-solid fa-chevron-right"></i>
       </button>
@@ -204,6 +232,51 @@
       <button onclick="sessionRedeem()" class="py-3.5 bg-emerald-500 hover:bg-emerald-600 rounded-2xl font-bold text-white shadow-lg shadow-emerald-500/30 active:scale-95 transition flex items-center justify-center space-x-2">
         <i class="fa-solid fa-check text-white"></i>
         <span>SỬ DỤNG</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: XEM CHI TIẾT READ-ONLY (DÀNH CHO VOUCHER ĐÃ DÙNG / HẾT HẠN) -->
+  <div id="modalDetail" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="font-bold text-slate-800">Chi Tiết Voucher</h3>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <!-- Tag Thông tin Nhà cung cấp & Mệnh giá -->
+      <div class="flex justify-between items-center">
+        <span id="detailProvider" class="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">--</span>
+        <span id="detailAmount" class="text-sm font-extrabold text-emerald-600">-- đ</span>
+      </div>
+
+      <!-- Khung hiển thị đầy đủ ảnh -->
+      <div class="w-full h-56 bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border">
+        <img id="detailImg" class="w-full h-full object-contain" src="" alt="Voucher detail">
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-xl text-center border border-slate-100 space-y-1">
+        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Mã Voucher</p>
+        <p id="detailCode" class="font-mono text-lg font-black text-indigo-600 break-all">--</p>
+      </div>
+
+      <div class="space-y-2 text-xs text-slate-600 border-t pt-3">
+        <div class="flex justify-between">
+          <span class="text-slate-400">Hạn dùng:</span>
+          <span id="detailExpDate" class="font-semibold">--/--/----</span>
+        </div>
+        <div id="detailUsedAtContainer" class="flex justify-between">
+          <span class="text-slate-400">Thời gian dùng:</span>
+          <span id="detailUsedAt" class="font-semibold text-slate-700">--</span>
+        </div>
+        <div id="detailLocationContainer" class="space-y-1">
+          <span class="text-slate-400 block">Địa điểm dùng:</span>
+          <p id="detailLocation" class="font-medium text-slate-700 bg-slate-100 p-2 rounded-lg text-[11px] leading-relaxed">--</p>
+        </div>
+      </div>
+
+      <button onclick="closeDetailModal()" class="w-full py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition text-xs">
+        Đóng
       </button>
     </div>
   </div>
@@ -229,15 +302,15 @@
       updateDoc 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-     const firebaseConfig = {
-    apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
-    authDomain: "voucher-managerment.firebaseapp.com",
-    projectId: "voucher-managerment",
-    storageBucket: "voucher-managerment.firebasestorage.app",
-    messagingSenderId: "95234579058",
-    appId: "1:95234579058:web:2698c0198ca317b60940eb",
-    measurementId: "G-QN9ZCC7B36"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
+      authDomain: "voucher-managerment.firebaseapp.com",
+      projectId: "voucher-managerment",
+      storageBucket: "voucher-managerment.firebasestorage.app",
+      messagingSenderId: "95234579058",
+      appId: "1:95234579058:web:2698c0198ca317b60940eb",
+      measurementId: "G-QN9ZCC7B36"
+    };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -252,6 +325,12 @@
     let base64Image = '';
     let selectedFileHash = '';
     let isZoomedIn = false;
+
+    // Format số tiền hiển thị
+    function formatCurrency(amount) {
+      if (!amount) return '0 đ';
+      return new Intl.NumberFormat('vi-VN').format(amount) + ' đ';
+    }
 
     // --- BẬT / TẮT LOADING OVERLAY ---
     function showLoading(msg = "Đang xử lý...") {
@@ -379,10 +458,20 @@
         return;
       }
 
-      container.innerHTML = list.map(item => `
+      container.innerHTML = list.map(item => {
+        const isClickableToUse = !item.is_used && currentTab === 'active';
+        const clickHandler = isClickableToUse 
+          ? `openSingleUseModal('${item.id}')` 
+          : `openDetailModal('${item.id}')`;
+
+        return `
         <div class="glass-card rounded-2xl p-3 flex space-x-3 items-center">
-          <img src="${item.image_url}" class="w-16 h-16 object-cover rounded-xl border cursor-pointer" onclick="openSingleUseModal('${item.id}')" alt="Voucher">
-          <div class="flex-1 min-w-0 cursor-pointer" onclick="openSingleUseModal('${item.id}')">
+          <img src="${item.image_url}" class="w-16 h-16 object-cover rounded-xl border cursor-pointer bg-slate-900" onclick="${clickHandler}" alt="Voucher">
+          <div class="flex-1 min-w-0 cursor-pointer" onclick="${clickHandler}">
+            <div class="flex items-center space-x-1.5 mb-0.5">
+              <span class="text-[10px] font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded">${item.provider || 'UrBox'}</span>
+              <span class="text-xs font-extrabold text-emerald-600">${formatCurrency(item.amount)}</span>
+            </div>
             <p class="font-bold text-slate-800 text-sm truncate">${item.code || 'Mã hình ảnh'}</p>
             <p class="text-[11px] text-slate-400 mt-0.5">Hạn: <span class="font-semibold text-slate-600">${item.expiration_date || 'Không có'}</span></p>
             ${item.is_used ? `
@@ -393,20 +482,57 @@
             ` : ''}
           </div>
 
-          ${!item.is_used ? `
+          ${!item.is_used && currentTab === 'active' ? `
             <button onclick="openSingleUseModal('${item.id}')" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold text-xs rounded-xl hover:bg-indigo-600 hover:text-white transition">
               Dùng
             </button>
+          ` : item.is_used ? `
+            <div class="flex flex-col space-y-1">
+              <button onclick="openDetailModal('${item.id}')" class="px-2.5 py-1 bg-slate-100 text-slate-600 font-bold text-[11px] rounded-lg hover:bg-slate-200 transition">
+                Xem
+              </button>
+              <button onclick="restoreVoucher('${item.id}')" class="px-2.5 py-1 bg-amber-50 text-amber-600 font-bold text-[11px] rounded-lg hover:bg-amber-500 hover:text-white transition">
+                Khôi phục
+              </button>
+            </div>
           ` : `
-            <button onclick="restoreVoucher('${item.id}')" class="px-3 py-1.5 bg-amber-50 text-amber-600 font-bold text-xs rounded-xl hover:bg-amber-500 hover:text-white transition">
-              <i class="fa-solid fa-rotate-left"></i> Khôi phục
+            <button onclick="openDetailModal('${item.id}')" class="px-3 py-1.5 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition">
+              Xem
             </button>
           `}
         </div>
-      `).join('');
+      `}).join('');
     }
 
-    // NÚT "DÙNG" NGOÀI DANH SÁCH -> MỞ MODAL CHỈ CHO VOUCHER ĐÓ
+    // MODAL READ-ONLY CHI TIẾT
+    window.openDetailModal = (id) => {
+      const target = loadedVouchers.find(v => v.id === id);
+      if (!target) return;
+
+      document.getElementById('detailImg').src = target.image_url;
+      document.getElementById('detailCode').innerText = target.code || 'KHÔNG CÓ MÃ';
+      document.getElementById('detailProvider').innerText = target.provider || 'UrBox';
+      document.getElementById('detailAmount').innerText = formatCurrency(target.amount);
+      document.getElementById('detailExpDate').innerText = target.expiration_date || 'Không có';
+
+      if (target.is_used) {
+        document.getElementById('detailUsedAtContainer').classList.remove('hidden');
+        document.getElementById('detailLocationContainer').classList.remove('hidden');
+        document.getElementById('detailUsedAt').innerText = target.used_at ? new Date(target.used_at).toLocaleString('vi-VN') : 'N/A';
+        document.getElementById('detailLocation').innerText = target.used_location || 'N/A';
+      } else {
+        document.getElementById('detailUsedAtContainer').classList.add('hidden');
+        document.getElementById('detailLocationContainer').classList.add('hidden');
+      }
+
+      document.getElementById('modalDetail').classList.remove('hidden');
+    };
+
+    window.closeDetailModal = () => {
+      document.getElementById('modalDetail').classList.add('hidden');
+    };
+
+    // NÚT "DÙNG" NGOÀI DANH SÁCH -> MỞ MODAL CHO VOUCHER ĐÓ
     window.openSingleUseModal = (id) => {
       const target = loadedVouchers.find(v => v.id === id);
       if (!target) return;
@@ -468,7 +594,18 @@
       });
     }
 
-    // --- UPLOAD ---
+    // --- UPLOAD CONTROL ---
+    window.toggleCustomAmountInput = () => {
+      const select = document.getElementById('inputAmountSelect');
+      const customInput = document.getElementById('inputAmountCustom');
+      if (select.value === 'custom') {
+        customInput.classList.remove('hidden');
+        customInput.focus();
+      } else {
+        customInput.classList.add('hidden');
+      }
+    };
+
     window.openUploadModal = () => document.getElementById('modalUpload').classList.remove('hidden');
     window.closeUploadModal = () => {
       document.getElementById('modalUpload').classList.add('hidden');
@@ -485,6 +622,11 @@
         base64Image = await compressAndConvertToBase64(file);
         document.getElementById('imgPreview').src = base64Image;
         document.getElementById('uploadPreviewContainer').classList.remove('hidden');
+
+        // Đặt sẵn hạn dùng mặc định +3 THÁNG
+        const exp3Months = new Date();
+        exp3Months.setMonth(exp3Months.getMonth() + 3);
+        document.getElementById('inputExpDate').value = exp3Months.toISOString().split('T')[0];
 
         selectedFileHash = CryptoJS.SHA256(base64Image).toString();
 
@@ -504,6 +646,16 @@
 
     window.saveVoucher = async () => {
       const code = document.getElementById('inputCode').value.trim();
+      const provider = document.getElementById('inputProvider').value;
+      const amountSelect = document.getElementById('inputAmountSelect').value;
+      let amount = 0;
+
+      if (amountSelect === 'custom') {
+        amount = Number(document.getElementById('inputAmountCustom').value);
+      } else {
+        amount = Number(amountSelect);
+      }
+
       let expDate = document.getElementById('inputExpDate').value;
 
       if (!code) {
@@ -511,9 +663,14 @@
         return;
       }
 
+      if (!amount || amount <= 0) {
+        alert("Vui lòng nhập hoặc chọn mệnh giá hợp lệ!");
+        return;
+      }
+
       if (!expDate) {
         const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 30);
+        defaultDate.setMonth(defaultDate.getMonth() + 3); // Mặc định +3 Tháng
         expDate = defaultDate.toISOString().split('T')[0];
       }
 
@@ -533,6 +690,8 @@
 
         await addDoc(collection(db, "vouchers"), {
           code: code,
+          provider: provider,
+          amount: amount,
           expiration_date: expDate,
           image_url: base64Image,
           image_hash: selectedFileHash,
@@ -583,7 +742,7 @@
       }
     };
 
-    // RENDER VOUCHER TRONG PHIÊN + THUẬT TOÁN AUTO-ZOOM CHÍNH XÁC VÀO BARCODE / QR CODE
+    // RENDER VOUCHER TRONG PHIÊN SỬ DỤNG
     async function renderSessionItem() {
       if (sessionList.length === 0) {
         endSession();
@@ -597,6 +756,10 @@
       document.getElementById('sessionIndex').innerText = sessionCurrentIndex + 1;
       document.getElementById('sessionCodeDisplay').innerText = item.code || 'KHÔNG CÓ MÃ';
       document.getElementById('sessionExpDate').innerText = item.expiration_date;
+
+      // Cập nhật Mệnh giá & Nhà cung cấp
+      document.getElementById('sessionProviderTag').innerText = item.provider || 'UrBox';
+      document.getElementById('sessionAmountTag').innerText = formatCurrency(item.amount);
 
       const img = document.getElementById('sessionImg');
       img.src = item.image_url;
@@ -697,7 +860,7 @@
       }
     };
 
-    // BẤM SỬ DỤNG VOUCHER CÓ THÔNG BÁO LOADING ĐỊA CHỈ
+    // BẤM SỬ DỤNG VOUCHER
     window.sessionRedeem = async () => {
       const item = sessionList[sessionCurrentIndex];
       
