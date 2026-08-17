@@ -44,23 +44,26 @@
       </span>
     </div>
     
-    <!-- User Auth -->
-    <div id="authContainer">
-      <button id="btnLogin" class="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm hover:bg-slate-50 transition">
-        <i class="fa-brands fa-google text-red-500"></i>
-        <span>Đăng nhập</span>
+    <!-- User Auth Container -->
+    <div class="flex items-center space-x-2">
+      <span id="user-info" class="text-xs font-semibold text-slate-500 max-w-[120px] truncate">Chưa đăng nhập</span>
+      <button id="btn-login" class="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-semibold shadow-sm hover:bg-indigo-700 active:scale-95 transition">
+        Đăng nhập Google
       </button>
-      <div id="userInfo" class="hidden flex items-center space-x-3">
-        <img id="userAvatar" class="w-8 h-8 rounded-full border-2 border-indigo-500 shadow-sm" src="" alt="Avatar">
-        <button id="btnLogout" class="text-xs text-slate-400 hover:text-red-500 transition" title="Đăng xuất">
-          <i class="fa-solid fa-right-from-bracket"></i>
-        </button>
-      </div>
     </div>
   </header>
 
-  <!-- MAIN CONTAINER -->
-  <main class="max-w-md mx-auto px-4">
+  <!-- LỜI NHẮC CHƯA ĐĂNG NHẬP -->
+  <div id="login-prompt" class="max-w-md mx-auto px-4 text-center py-12">
+    <div class="glass-card rounded-3xl p-8 space-y-3">
+      <i class="fa-solid fa-lock text-4xl text-indigo-400"></i>
+      <h3 class="font-bold text-slate-700">Vui lòng đăng nhập</h3>
+      <p class="text-xs text-slate-400">Bạn cần đăng nhập tài khoản Google được cấp quyền để truy cập danh sách Voucher.</p>
+    </div>
+  </div>
+
+  <!-- NỘI DUNG CHÍNH (ẨN KHI CHƯA ĐĂNG NHẬP) -->
+  <main id="app-content" class="max-w-md mx-auto px-4 hidden">
     
     <!-- HERO BUTTON -->
     <div class="glass-card rounded-3xl p-5 mb-6 text-center relative overflow-hidden">
@@ -87,9 +90,7 @@
     </div>
 
     <!-- LIST CONTAINER -->
-    <div id="voucherContainer" class="space-y-4">
-      <p class="text-center text-xs text-slate-400 py-8">Vui lòng đăng nhập để xem dữ liệu.</p>
-    </div>
+    <div id="voucherContainer" class="space-y-4"></div>
   </main>
 
   <!-- FLOATING UPLOAD BUTTON -->
@@ -150,8 +151,7 @@
         
         <div class="bg-slate-50 p-4 rounded-xl text-center border border-slate-100">
           <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Mã Quét Thu Ngân</p>
-          <div id="sessionCodeDisplay" class="font-mono text-2xl font-black text-indigo-600 tracking-wider break-all">
-          </div>
+          <div id="sessionCodeDisplay" class="font-mono text-2xl font-black text-indigo-600 tracking-wider break-all"></div>
         </div>
 
         <div class="flex justify-between items-center text-xs text-slate-500 px-1">
@@ -176,14 +176,13 @@
 
   <div id="reader" class="hidden"></div>
 
-  <!-- FIREBASE SCRIPT (USING SIGN IN WITH REDIRECT) -->
+  <!-- FIREBASE SCRIPT -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
       getAuth, 
       GoogleAuthProvider, 
-      signInWithRedirect, 
-      getRedirectResult, 
+      signInWithPopup, 
       signOut, 
       onAuthStateChanged 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -198,7 +197,6 @@
       updateDoc 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // CONFIG CỦA BẠN
      const firebaseConfig = {
     apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
     authDomain: "voucher-managerment.firebaseapp.com",
@@ -222,44 +220,38 @@
     let base64Image = '';
     let selectedFileHash = '';
 
-    // --- CẤU HÌNH ĐĂNG NHẬP REDIRECT ---
-    // Kiểm tra kết quả trả về sau khi trình duyệt chuyển hướng về lại App
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result && result.user) {
-          alert("Đăng nhập thành công: " + result.user.email);
+    // --- CƠ CHẾ AUTH BẠN YÊU CẦU ---
+    const btnLogin = document.getElementById('btn-login');
+    
+    btnLogin.addEventListener('click', async () => {
+      if (currentUser) {
+        try {
+          await signOut(auth);
+        } catch (e) { console.error("Lỗi đăng xuất:", e); }
+      } else {
+        try {
+          btnLogin.innerText = "Đang xử lý...";
+          await signInWithPopup(auth, provider);
+        } catch (error) {
+          alert("Đăng nhập thất bại: " + error.message);
+          btnLogin.innerText = "Đăng nhập Google";
         }
-      })
-      .catch((error) => {
-        alert("Lỗi sau khi chuyển hướng: " + error.message);
-      });
-
-    // Sự kiện nút Đăng nhập
-    document.getElementById('btnLogin').addEventListener('click', () => {
-      signInWithRedirect(auth, provider).catch((error) => {
-        alert("Lỗi khi gọi Redirect: " + error.message);
-      });
+      }
     });
 
-    // Sự kiện nút Đăng xuất
-    document.getElementById('btnLogout').addEventListener('click', () => {
-      signOut(auth);
-    });
-
-    // Theo dõi trạng thái Đăng nhập
     onAuthStateChanged(auth, (user) => {
+      currentUser = user;
       if (user) {
-        currentUser = user;
-        document.getElementById('btnLogin').classList.add('hidden');
-        document.getElementById('userInfo').classList.remove('hidden');
-        document.getElementById('userAvatar').src = user.photoURL || 'https://via.placeholder.com/32';
+        document.getElementById('user-info').innerText = user.email;
+        btnLogin.innerText = "Đăng xuất";
+        document.getElementById('app-content').classList.remove('hidden');
+        document.getElementById('login-prompt').classList.add('hidden');
         loadVouchers('active');
       } else {
-        currentUser = null;
-        document.getElementById('btnLogin').classList.remove('hidden');
-        document.getElementById('userInfo').classList.add('hidden');
-        document.getElementById('voucherContainer').innerHTML = 
-          `<p class="text-center text-xs text-slate-400 py-8">Vui lòng đăng nhập để xem dữ liệu.</p>`;
+        document.getElementById('user-info').innerText = "Chưa đăng nhập";
+        btnLogin.innerText = "Đăng nhập Google";
+        document.getElementById('app-content').classList.add('hidden');
+        document.getElementById('login-prompt').classList.remove('hidden');
       }
     });
 
