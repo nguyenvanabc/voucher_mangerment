@@ -270,39 +270,36 @@
     };
 
     async function loadVouchers(type) {
-      if (!currentUser) return;
-      const container = document.getElementById('voucherContainer');
-      container.innerHTML = `<div class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin text-lg"></i> Đang tải...</div>`;
+  if (!currentUser) return;
+  const container = document.getElementById('voucherContainer');
+  container.innerHTML = `<div class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin text-lg"></i> Đang tải...</div>`;
 
-      const today = new Date().toISOString().split('T')[0];
-      let q;
+  const today = new Date().toISOString().split('T')[0];
 
-      try {
-        if (type === 'active') {
-          q = query(collection(db, "vouchers"), where("is_used", "==", false), where("expiration_date", ">=", today));
-        } else if (type === 'used') {
-          q = query(collection(db, "vouchers"), where("is_used", "==", true));
-        } else if (type === 'expired') {
-          q = query(collection(db, "vouchers"), where("is_used", "==", false), where("expiration_date", "<", today));
-        }
+  try {
+    // 1. Chỉ lấy toàn bộ dữ liệu đơn giản (Không kết hợp 2 điều kiện where)
+    const snapshot = await getDocs(collection(db, "vouchers"));
+    let allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        const snapshot = await getDocs(q);
-        loadedVouchers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-        if (type === 'active') {
-          document.getElementById('countActive').innerText = loadedVouchers.length;
-        }
-
-        renderVoucherList(loadedVouchers);
-      } catch (err) {
-        if (err.code === 'permission-denied') {
-          container.innerHTML = `<div class="text-center py-8 text-xs font-semibold text-red-500">Tài khoản (${currentUser.email}) chưa được cấp quyền trên Rules!</div>`;
-        } else {
-          container.innerHTML = `<p class="text-center text-xs text-red-400 py-4">Lỗi tải dữ liệu.</p>`;
-        }
-      }
+    // 2. Tự lọc bằng JavaScript thuần (Tránh lỗi thiếu Index)
+    if (type === 'active') {
+      loadedVouchers = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date));
+    } else if (type === 'used') {
+      loadedVouchers = allData.filter(v => v.is_used === true);
+    } else if (type === 'expired') {
+      loadedVouchers = allData.filter(v => v.is_used === false && v.expiration_date < today);
     }
 
+    // Cập nhật số lượng tab active
+    const activeCount = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date)).length;
+    document.getElementById('countActive').innerText = activeCount;
+
+    renderVoucherList(loadedVouchers);
+  } catch (err) {
+    console.error("Lỗi Firestore cụ thể:", err);
+    container.innerHTML = `<p class="text-center text-xs text-red-400 py-4">Lỗi: ${err.message}</p>`;
+  }
+}
     function renderVoucherList(list) {
       const container = document.getElementById('voucherContainer');
       if (list.length === 0) {
