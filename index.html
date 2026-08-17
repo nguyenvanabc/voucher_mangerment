@@ -424,31 +424,41 @@
     };
 
     async function loadVouchers(type) {
-      if (!currentUser) return;
-      const container = document.getElementById('voucherContainer');
-      container.innerHTML = `<div class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin text-lg"></i> Đang tải...</div>`;
+    if (!currentUser) return;
+    const container = document.getElementById('voucherContainer');
+    container.innerHTML = `<div class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin text-lg"></i> Đang tải...</div>`;
 
-      const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
 
-      try {
+    try {
         const snapshot = await getDocs(collection(db, "vouchers"));
         let allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+        // 1. Lọc dữ liệu theo tab
         if (type === 'active') {
-          loadedVouchers = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date));
+            loadedVouchers = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date));
         } else if (type === 'used') {
-          loadedVouchers = allData.filter(v => v.is_used === true);
+            loadedVouchers = allData.filter(v => v.is_used === true);
         } else if (type === 'expired') {
-          loadedVouchers = allData.filter(v => v.is_used === false && v.expiration_date < today);
+            loadedVouchers = allData.filter(v => v.is_used === false && v.expiration_date < today);
         }
 
+        // 2. SORT TẠI ĐÂY: Voucher nào hết hạn trước (ngày nhỏ hơn) sẽ lên đầu
+        loadedVouchers.sort((a, b) => {
+            if (!a.expiration_date) return 1;  // Không có hạn dùng thì đẩy xuống dưới
+            if (!b.expiration_date) return -1;
+            return new Date(a.expiration_date) - new Date(b.expiration_date);
+        });
+
+        // 3. Cập nhật số lượng khả dụng
         const activeCount = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date)).length;
         document.getElementById('countActive').innerText = activeCount;
 
+        // 4. Đẩy danh sách đã sort sang render
         renderVoucherList(loadedVouchers);
-      } catch (err) {
+    } catch (err) {
         container.innerHTML = `<p class="text-center text-xs text-red-400 py-4">Lỗi tải dữ liệu: ${err.message}</p>`;
-      }
+    }
     }
 
     function renderVoucherList(list) {
