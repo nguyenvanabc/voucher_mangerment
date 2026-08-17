@@ -46,13 +46,13 @@
     
     <!-- User Auth -->
     <div id="authContainer">
-      <button id="btnLogin" onclick="loginGoogle()" class="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm hover:bg-slate-50 transition">
+      <button id="btnLogin" class="flex items-center space-x-2 bg-white border border-slate-200 px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm hover:bg-slate-50 transition">
         <i class="fa-brands fa-google text-red-500"></i>
         <span>Đăng nhập</span>
       </button>
       <div id="userInfo" class="hidden flex items-center space-x-3">
         <img id="userAvatar" class="w-8 h-8 rounded-full border-2 border-indigo-500 shadow-sm" src="" alt="Avatar">
-        <button onclick="logoutGoogle()" class="text-xs text-slate-400 hover:text-red-500 transition" title="Đăng xuất">
+        <button id="btnLogout" class="text-xs text-slate-400 hover:text-red-500 transition" title="Đăng xuất">
           <i class="fa-solid fa-right-from-bracket"></i>
         </button>
       </div>
@@ -176,13 +176,30 @@
 
   <div id="reader" class="hidden"></div>
 
-  <!-- FIREBASE SCRIPT (ONLY FIRESTORE + AUTH) -->
+  <!-- FIREBASE SCRIPT (USING SIGN IN WITH REDIRECT) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, query, where, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { 
+      getAuth, 
+      GoogleAuthProvider, 
+      signInWithRedirect, 
+      getRedirectResult, 
+      signOut, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      query, 
+      where, 
+      getDocs, 
+      doc, 
+      updateDoc 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    const firebaseConfig = {
+    // CONFIG CỦA BẠN
+     const firebaseConfig = {
     apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
     authDomain: "voucher-managerment.firebaseapp.com",
     projectId: "voucher-managerment",
@@ -190,7 +207,7 @@
     messagingSenderId: "95234579058",
     appId: "1:95234579058:web:2698c0198ca317b60940eb",
     measurementId: "G-QN9ZCC7B36"
-    };
+  };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -205,25 +222,37 @@
     let base64Image = '';
     let selectedFileHash = '';
 
-    // --- AUTHENTICATION ---
-    window.loginGoogle = async () => {
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (err) {
-        alert("Lỗi đăng nhập: " + err.message);
-      }
-    };
+    // --- CẤU HÌNH ĐĂNG NHẬP REDIRECT ---
+    // Kiểm tra kết quả trả về sau khi trình duyệt chuyển hướng về lại App
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user) {
+          alert("Đăng nhập thành công: " + result.user.email);
+        }
+      })
+      .catch((error) => {
+        alert("Lỗi sau khi chuyển hướng: " + error.message);
+      });
 
-    window.logoutGoogle = async () => {
-      await signOut(auth);
-    };
+    // Sự kiện nút Đăng nhập
+    document.getElementById('btnLogin').addEventListener('click', () => {
+      signInWithRedirect(auth, provider).catch((error) => {
+        alert("Lỗi khi gọi Redirect: " + error.message);
+      });
+    });
 
+    // Sự kiện nút Đăng xuất
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      signOut(auth);
+    });
+
+    // Theo dõi trạng thái Đăng nhập
     onAuthStateChanged(auth, (user) => {
       if (user) {
         currentUser = user;
         document.getElementById('btnLogin').classList.add('hidden');
         document.getElementById('userInfo').classList.remove('hidden');
-        document.getElementById('userAvatar').src = user.photoURL;
+        document.getElementById('userAvatar').src = user.photoURL || 'https://via.placeholder.com/32';
         loadVouchers('active');
       } else {
         currentUser = null;
@@ -335,7 +364,6 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
             
-            // Nén ảnh chất lượng 0.7 JPEG (Dung lượng siêu nhẹ ~30-70KB)
             resolve(canvas.toDataURL('image/jpeg', 0.7));
           };
         };
@@ -354,15 +382,12 @@
       const file = event.target.files[0];
       if (!file) return;
 
-      // 1. Nén ảnh chuyển thành Base64
       base64Image = await compressAndConvertToBase64(file);
       document.getElementById('imgPreview').src = base64Image;
       document.getElementById('uploadPreviewContainer').classList.remove('hidden');
 
-      // 2. Hash ảnh chống trùng tuyệt đối
       selectedFileHash = CryptoJS.SHA256(base64Image).toString();
 
-      // 3. Tự động Quét QR/Barcode
       const html5QrCode = new Html5Qrcode("reader");
       try {
         const decodedText = await html5QrCode.scanFile(file, true);
@@ -387,7 +412,6 @@
       document.getElementById('btnSaveVoucher').disabled = true;
 
       try {
-        // Kiểm tra trùng lặp trên Firestore
         const qCode = query(collection(db, "vouchers"), where("code", "==", code));
         const qHash = query(collection(db, "vouchers"), where("image_hash", "==", selectedFileHash));
         
@@ -398,7 +422,6 @@
           return;
         }
 
-        // Lưu trực tiếp vào Firestore (Ảnh lưu dạng Base64 string trong image_url)
         await addDoc(collection(db, "vouchers"), {
           code: code,
           expiration_date: expDate || '2099-12-31',
