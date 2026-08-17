@@ -175,7 +175,6 @@
         <span class="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
           Phiên dùng: <span id="sessionIndex">1</span>/<span id="sessionTotal">0</span>
         </span>
-        <!-- Tổng tiền đã dùng trong phiên -->
         <span id="sessionRedeemedAmount" class="text-[11px] font-semibold text-emerald-400 mt-1.5 pl-1">
           Đã dùng: 0 đ
         </span>
@@ -317,7 +316,7 @@
     let selectedFileHash = '';
     let isZoomedIn = false;
     let currentZoomInfo = null;
-    let sessionRedeemedAmount = 0; // Tổng tiền đã dùng trong phiên
+    let sessionRedeemedAmount = 0;
 
     function formatCurrency(amount) {
       if (!amount) return '0 đ';
@@ -430,11 +429,22 @@
           loadedVouchers = allData.filter(v => !v.is_used && v.expiration_date < today);
         }
 
-        loadedVouchers.sort((a, b) => {
-          if (!a.expiration_date) return 1;
-          if (!b.expiration_date) return -1;
-          return new Date(a.expiration_date) - new Date(b.expiration_date);
-        });
+        // Sắp xếp theo từng tab
+        if (type === 'used') {
+          // Tab Đã dùng: voucher mới dùng nhất lên đầu
+          loadedVouchers.sort((a, b) => {
+            const timeA = a.used_at ? new Date(a.used_at).getTime() : 0;
+            const timeB = b.used_at ? new Date(b.used_at).getTime() : 0;
+            return timeB - timeA;
+          });
+        } else {
+          // Tab Khả dụng + Hết hạn: hết hạn gần nhất lên đầu
+          loadedVouchers.sort((a, b) => {
+            if (!a.expiration_date) return 1;
+            if (!b.expiration_date) return -1;
+            return new Date(a.expiration_date) - new Date(b.expiration_date);
+          });
+        }
 
         document.getElementById('countActive').innerText = allData.filter(v => !v.is_used && (v.expiration_date >= today || !v.expiration_date)).length;
         renderVoucherList(loadedVouchers);
@@ -687,11 +697,20 @@
       try {
         const snapshot = await getDocs(collection(db, "vouchers"));
         const allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
         sessionList = allData.filter(v => !v.is_used && (v.expiration_date >= today || !v.expiration_date));
+        
         if (sessionList.length === 0) return alert("Không có voucher khả dụng để tạo phiên!");
 
+        // Ưu tiên voucher hết hạn gần nhất lên đầu phiên
+        sessionList.sort((a, b) => {
+          if (!a.expiration_date) return 1;
+          if (!b.expiration_date) return -1;
+          return new Date(a.expiration_date) - new Date(b.expiration_date);
+        });
+
         sessionCurrentIndex = 0;
-        sessionRedeemedAmount = 0; // Reset tổng tiền khi bắt đầu phiên mới
+        sessionRedeemedAmount = 0;
         updateRedeemedAmountDisplay();
 
         document.getElementById('sessionTotal').innerText = sessionList.length;
@@ -908,7 +927,6 @@
           used_location: location
         });
 
-        // Cộng dồn tiền đã dùng trong phiên
         sessionRedeemedAmount += (item.amount || 0);
         updateRedeemedAmountDisplay();
 
