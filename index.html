@@ -171,9 +171,15 @@
    
     <!-- Top bar -->
     <div class="flex justify-between items-center pt-3 px-4 z-20 shrink-0">
-      <span class="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
-        Phiên dùng: <span id="sessionIndex">1</span>/<span id="sessionTotal">0</span>
-      </span>
+      <div class="flex flex-col">
+        <span class="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
+          Phiên dùng: <span id="sessionIndex">1</span>/<span id="sessionTotal">0</span>
+        </span>
+        <!-- Tổng tiền đã dùng trong phiên -->
+        <span id="sessionRedeemedAmount" class="text-[11px] font-semibold text-emerald-400 mt-1.5 pl-1">
+          Đã dùng: 0 đ
+        </span>
+      </div>
       <button onclick="endSession()" class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-slate-300 hover:text-white active:scale-90 transition">
         <i class="fa-solid fa-xmark text-lg"></i>
       </button>
@@ -311,6 +317,7 @@
     let selectedFileHash = '';
     let isZoomedIn = false;
     let currentZoomInfo = null;
+    let sessionRedeemedAmount = 0; // Tổng tiền đã dùng trong phiên
 
     function formatCurrency(amount) {
       if (!amount) return '0 đ';
@@ -330,6 +337,11 @@
       toast.innerText = msg;
       toast.classList.remove('hidden');
       setTimeout(() => toast.classList.add('hidden'), 1800);
+    }
+
+    function updateRedeemedAmountDisplay() {
+      document.getElementById('sessionRedeemedAmount').innerText = 
+        `Đã dùng: ${formatCurrency(sessionRedeemedAmount)}`;
     }
 
     // ===== AUTH =====
@@ -497,6 +509,8 @@
       if (!target) return;
       sessionList = [target];
       sessionCurrentIndex = 0;
+      sessionRedeemedAmount = 0;
+      updateRedeemedAmountDisplay();
       document.getElementById('sessionTotal').innerText = 1;
       document.getElementById('swipeHint').classList.add('hidden');
       renderSessionItem();
@@ -677,6 +691,9 @@
         if (sessionList.length === 0) return alert("Không có voucher khả dụng để tạo phiên!");
 
         sessionCurrentIndex = 0;
+        sessionRedeemedAmount = 0; // Reset tổng tiền khi bắt đầu phiên mới
+        updateRedeemedAmountDisplay();
+
         document.getElementById('sessionTotal').innerText = sessionList.length;
         document.getElementById('swipeHint').classList.toggle('hidden', sessionList.length <= 1);
         renderSessionItem();
@@ -714,13 +731,11 @@
       resetZoom(img);
       updateDots();
 
-      // Ưu tiên dùng zoom_info đã cache
       if (item.zoom_info && item.zoom_info.hasCode) {
         applyZoom(img, item.zoom_info.x, item.zoom_info.y, item.zoom_info.scale);
         return;
       }
 
-      // Fallback cho voucher cũ
       try {
         const html5QrCode = new Html5Qrcode("reader");
         const res = await fetch(item.image_url);
@@ -804,7 +819,6 @@
         const deltaX = currentX - startX;
         const deltaY = e.touches[0].clientY - startY;
 
-        // Chỉ xử lý kéo ngang
         if (Math.abs(deltaX) < Math.abs(deltaY)) return;
 
         const rotate = deltaX * 0.08;
@@ -828,7 +842,6 @@
 
           const goingNext = deltaX < 0;
 
-          // Bay văng kiểu Tinder
           const flyX = goingNext ? -window.innerWidth * 1.3 : window.innerWidth * 1.3;
           const flyRotate = goingNext ? -28 : 28;
 
@@ -841,7 +854,6 @@
 
             renderSessionItem();
 
-            // Voucher mới xuất hiện từ phía đối diện
             card.style.transition = 'none';
             card.style.transform = `translateX(${goingNext ? 90 : -90}px) rotate(${goingNext ? 10 : -10}deg)`;
             card.style.opacity = '0';
@@ -853,7 +865,6 @@
             });
           }, 300);
         } else {
-          // Trở về vị trí cũ
           card.style.transform = 'translateX(0) rotate(0deg)';
           card.style.opacity = '1';
         }
@@ -867,7 +878,6 @@
       const card = document.getElementById('sessionCard');
       card.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease';
       
-      // Bay sang trái kiểu Tinder
       card.style.transform = `translateX(-${window.innerWidth * 1.2}px) rotate(-26deg)`;
       card.style.opacity = '0';
 
@@ -897,6 +907,10 @@
           used_at: new Date().toISOString(),
           used_location: location
         });
+
+        // Cộng dồn tiền đã dùng trong phiên
+        sessionRedeemedAmount += (item.amount || 0);
+        updateRedeemedAmountDisplay();
 
         sessionList.splice(sessionCurrentIndex, 1);
         document.getElementById('sessionTotal').innerText = sessionList.length;
