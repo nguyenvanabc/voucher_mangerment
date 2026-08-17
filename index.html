@@ -121,7 +121,7 @@
             <input type="text" id="inputCode" placeholder="Mã tự quét hoặc nhập tay..." class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
           <div>
-            <label class="block text-slate-500 mb-1 font-semibold">Ngày hết hạn (Mặc định +1 tháng):</label>
+            <label class="block text-slate-500 mb-1 font-semibold">Ngày hết hạn (Mặc định +3 tháng):</label>
             <input type="date" id="inputExpDate" class="w-full px-3 py-2 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
         </div>
@@ -133,7 +133,7 @@
     </div>
   </div>
 
-  <!-- MODAL: PHIÊN SỬ DỤNG (ĐÃ CÓ DUYỆT TRÁI / PHẢI) -->
+  <!-- MODAL: PHIÊN SỬ DỤNG / DÙNG NHANH -->
   <div id="modalSession" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 hidden flex flex-col justify-between p-3 text-white select-none">
     
     <!-- TOP BAR -->
@@ -150,7 +150,7 @@
     <div class="my-auto py-2 w-full flex items-center justify-between space-x-1">
       
       <!-- NÚT SANG TRÁI -->
-      <button onclick="sessionPrev()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
+      <button id="btnSessionPrev" onclick="sessionPrev()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
         <i class="fa-solid fa-chevron-left"></i>
       </button>
 
@@ -158,10 +158,12 @@
       <div id="sessionCard" class="overflow-y-auto max-h-[70vh] w-full flex flex-col items-center">
         <div class="bg-white text-slate-800 rounded-3xl p-3 shadow-2xl space-y-3 w-full max-w-sm">
           
-          <div class="relative bg-slate-100 rounded-2xl overflow-hidden flex items-center justify-center border min-h-[220px] max-h-[380px] p-1 cursor-zoom-in" onclick="toggleZoomImage()">
-            <img id="sessionImg" class="w-full h-full object-contain rounded-xl max-h-[360px] transition-transform duration-200" src="" alt="Voucher">
-            <span class="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full pointer-events-none">
-              <i class="fa-solid fa-magnifying-glass-plus"></i> Phóng to
+          <!-- KHUNG CHỨA ẢNH TỰ ĐỘNG ZOOM TẬP TRUNG VÀO BARCODE / QR CODE -->
+          <div class="relative bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center border h-[320px] w-full cursor-pointer select-none" onclick="toggleZoomImage()">
+            <img id="sessionImg" class="w-full h-full object-contain transition-transform duration-500 ease-out" src="" alt="Voucher">
+            
+            <span id="zoomHint" class="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded-full pointer-events-none border border-white/20 flex items-center gap-1">
+              <i class="fa-solid fa-compress"></i> <span>Chạm để thu nhỏ</span>
             </span>
           </div>
           
@@ -179,15 +181,15 @@
       </div>
 
       <!-- NÚT SANG PHẢI -->
-      <button onclick="sessionNext()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
+      <button id="btnSessionNext" onclick="sessionNext()" class="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center text-white shrink-0 transition">
         <i class="fa-solid fa-chevron-right"></i>
       </button>
     </div>
 
     <!-- NÚT ĐIỀU HƯỚNG BÊN DƯỚI -->
     <div class="max-w-sm mx-auto w-full grid grid-cols-2 gap-3 pb-2 z-10">
-      <button onclick="sessionNext()" class="py-3.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl font-bold text-slate-200 active:scale-95 transition flex items-center justify-center space-x-2">
-        <i class="fa-solid fa-forward text-slate-400"></i>
+      <button onclick="sessionSkip()" class="py-3.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl font-bold text-slate-200 active:scale-95 transition flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-xmark text-slate-400"></i>
         <span>Bỏ Qua</span>
       </button>
 
@@ -219,7 +221,7 @@
       updateDoc 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-     const firebaseConfig = {
+ const firebaseConfig = {
     apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
     authDomain: "voucher-managerment.firebaseapp.com",
     projectId: "voucher-managerment",
@@ -241,6 +243,7 @@
     let sessionCurrentIndex = 0;
     let base64Image = '';
     let selectedFileHash = '';
+    let isZoomedIn = false;
 
     // --- AUTHENTICATION ---
     const btnLogin = document.getElementById('btn-login');
@@ -341,8 +344,8 @@
 
       container.innerHTML = list.map(item => `
         <div class="glass-card rounded-2xl p-3 flex space-x-3 items-center">
-          <img src="${item.image_url}" class="w-16 h-16 object-cover rounded-xl border" alt="Voucher">
-          <div class="flex-1 min-w-0">
+          <img src="${item.image_url}" class="w-16 h-16 object-cover rounded-xl border cursor-pointer" onclick="openSingleUseModal('${item.id}')" alt="Voucher">
+          <div class="flex-1 min-w-0 cursor-pointer" onclick="openSingleUseModal('${item.id}')">
             <p class="font-bold text-slate-800 text-sm truncate">${item.code || 'Mã hình ảnh'}</p>
             <p class="text-[11px] text-slate-400 mt-0.5">Hạn: <span class="font-semibold text-slate-600">${item.expiration_date || 'Không có'}</span></p>
             ${item.is_used ? `
@@ -354,7 +357,7 @@
           </div>
 
           ${!item.is_used ? `
-            <button onclick="quickRedeem('${item.id}')" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold text-xs rounded-xl hover:bg-indigo-600 hover:text-white transition">
+            <button onclick="openSingleUseModal('${item.id}')" class="px-3 py-1.5 bg-indigo-50 text-indigo-600 font-bold text-xs rounded-xl hover:bg-indigo-600 hover:text-white transition">
               Dùng
             </button>
           ` : `
@@ -366,17 +369,20 @@
       `).join('');
     }
 
-    // ĐÁNH DẤU SỬ DỤNG
-    window.quickRedeem = async (id) => {
-      if (confirm("Đánh dấu voucher này là đã dùng?")) {
-        const location = await getCurrentLocation();
-        await updateDoc(doc(db, "vouchers", id), { 
-          is_used: true,
-          used_at: new Date().toISOString(),
-          used_location: location
-        });
-        loadVouchers(currentTab);
-      }
+    // NÚT "DÙNG" NGOÀI DANH SÁCH -> MỞ MODAL CHỈ CHO VOUCHER ĐÓ
+    window.openSingleUseModal = (id) => {
+      const target = loadedVouchers.find(v => v.id === id);
+      if (!target) return;
+
+      sessionList = [target];
+      sessionCurrentIndex = 0;
+
+      document.getElementById('btnSessionPrev').classList.add('invisible');
+      document.getElementById('btnSessionNext').classList.add('invisible');
+
+      document.getElementById('sessionTotal').innerText = 1;
+      renderSessionItem();
+      document.getElementById('modalSession').classList.remove('hidden');
     };
 
     // KHÔI PHỤC VOUCHER ĐÃ BẤM NHẦM
@@ -458,10 +464,9 @@
         return;
       }
 
-      // XỬ LÝ HẠN DÙNG MẶC ĐỊNH +1 THÁNG
       if (!expDate) {
         const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 30);
+        defaultDate.setDate(defaultDate.getDate() + 90);
         expDate = defaultDate.toISOString().split('T')[0];
       }
 
@@ -502,7 +507,7 @@
       }
     };
 
-    // --- PHIÊN SỬ DỤNG (CÓ DUYỆT TRÁI / PHẢI) ---
+    // --- BẮT ĐẦU PHIÊN SỬ DỤNG NHIỀU VOUCHER ---
     window.startSession = async () => {
       if (!currentUser) return alert("Vui lòng đăng nhập trước!");
 
@@ -520,6 +525,10 @@
         }
 
         sessionCurrentIndex = 0;
+
+        document.getElementById('btnSessionPrev').classList.remove('invisible');
+        document.getElementById('btnSessionNext').classList.remove('invisible');
+
         document.getElementById('sessionTotal').innerText = sessionList.length;
         renderSessionItem();
         document.getElementById('modalSession').classList.remove('hidden');
@@ -528,34 +537,119 @@
       }
     };
 
-    function renderSessionItem() {
+    // RENDER VOUCHER TRONG PHIÊN + THUẬT TOÁN AUTO-ZOOM CHÍNH XÁC VÀO BARCODE / QR CODE
+    async function renderSessionItem() {
       if (sessionList.length === 0) {
         endSession();
         return;
       }
 
-      if (sessionCurrentIndex >= sessionList.length) {
-        sessionCurrentIndex = 0; // Quay về đầu
-      }
-      if (sessionCurrentIndex < 0) {
-        sessionCurrentIndex = sessionList.length - 1; // Nhảy sang cuối
-      }
+      if (sessionCurrentIndex >= sessionList.length) sessionCurrentIndex = 0;
+      if (sessionCurrentIndex < 0) sessionCurrentIndex = sessionList.length - 1;
 
       const item = sessionList[sessionCurrentIndex];
       document.getElementById('sessionIndex').innerText = sessionCurrentIndex + 1;
-      document.getElementById('sessionImg').src = item.image_url;
       document.getElementById('sessionCodeDisplay').innerText = item.code || 'KHÔNG CÓ MÃ';
       document.getElementById('sessionExpDate').innerText = item.expiration_date;
+
+      const img = document.getElementById('sessionImg');
+      img.src = item.image_url;
+
+      resetZoom(img);
+
+      // TỰ ĐỘNG BẮT TỌA ĐỘ VÙNG MÃ (BARCODE / QR CODE) ĐỂ ZOOM MẶC ĐỊNH
+      try {
+        const html5QrCode = new Html5Qrcode("reader");
+        const res = await fetch(item.image_url);
+        const blob = await res.blob();
+        const file = new File([blob], "voucher.jpg", { type: "image/jpeg" });
+
+        const results = await html5QrCode.scanFileV2(file, true);
+        
+        if (results && results.length > 0) {
+          let allPoints = [];
+
+          results.forEach(res => {
+            if (res.result && res.result.points) {
+              allPoints.push(...res.result.points);
+            }
+          });
+
+          if (allPoints.length > 0) {
+            const xCoords = allPoints.map(p => p.x);
+            const yCoords = allPoints.map(p => p.y);
+
+            const minX = Math.min(...xCoords);
+            const maxX = Math.max(...xCoords);
+            const minY = Math.min(...yCoords);
+            const maxY = Math.max(...yCoords);
+
+            const avgX = (minX + maxX) / 2;
+            const avgY = (minY + maxY) / 2;
+
+            const tempImg = new Image();
+            tempImg.src = item.image_url;
+            tempImg.onload = () => {
+              const percentX = (avgX / tempImg.naturalWidth) * 100;
+              const percentY = (avgY / tempImg.naturalHeight) * 100;
+
+              // Nếu có từ 2 mã trở lên (Cả QR + Barcode), dùng scale vừa phải để chứa vừa cả 2
+              const scaleLevel = results.length > 1 ? 1.9 : 2.4;
+
+              applyZoom(img, percentX, percentY, scaleLevel);
+            };
+          } else {
+            applyZoom(img, 50, 50, 1.8);
+          }
+        } else {
+          applyZoom(img, 50, 50, 1.8);
+        }
+      } catch (err) {
+        applyZoom(img, 50, 50, 1.8);
+      }
     }
 
+    function applyZoom(img, x, y, scale) {
+      img.style.transformOrigin = `${x}% ${y}%`;
+      img.style.transform = `scale(${scale})`;
+      isZoomedIn = true;
+      document.getElementById('zoomHint').innerHTML = `<i class="fa-solid fa-compress"></i> <span>Chạm để thu nhỏ toàn bộ</span>`;
+    }
+
+    function resetZoom(img) {
+      img.style.transformOrigin = `center center`;
+      img.style.transform = `scale(1)`;
+      isZoomedIn = false;
+      document.getElementById('zoomHint').innerHTML = `<i class="fa-solid fa-magnifying-glass-plus"></i> <span>Chạm để soi mã</span>`;
+    }
+
+    window.toggleZoomImage = () => {
+      const img = document.getElementById('sessionImg');
+      if (isZoomedIn) {
+        resetZoom(img);
+      } else {
+        applyZoom(img, 50, 50, 2);
+      }
+    };
+
     window.sessionNext = () => {
+      if (sessionList.length <= 1) return;
       sessionCurrentIndex++;
       renderSessionItem();
     };
 
     window.sessionPrev = () => {
+      if (sessionList.length <= 1) return;
       sessionCurrentIndex--;
       renderSessionItem();
+    };
+
+    window.sessionSkip = () => {
+      if (sessionList.length === 1) {
+        endSession();
+      } else {
+        sessionNext();
+      }
     };
 
     window.sessionRedeem = async () => {
@@ -568,12 +662,10 @@
         used_location: location
       });
 
-      // Xóa item đã dùng khỏi danh sách phiên hiện tại
       sessionList.splice(sessionCurrentIndex, 1);
       document.getElementById('sessionTotal').innerText = sessionList.length;
 
       if (sessionList.length === 0) {
-        alert("Đã dùng hết tất cả voucher khả dụng!");
         endSession();
       } else {
         renderSessionItem();
@@ -583,20 +675,6 @@
     window.endSession = () => {
       document.getElementById('modalSession').classList.add('hidden');
       loadVouchers(currentTab);
-    };
-
-    // ZOOM ẢNH PHIÊN
-    let isZoomed = false;
-    window.toggleZoomImage = () => {
-      const img = document.getElementById('sessionImg');
-      isZoomed = !isZoomed;
-      if (isZoomed) {
-        img.classList.remove('max-h-[360px]', 'object-contain');
-        img.classList.add('w-full', 'h-auto');
-      } else {
-        img.classList.add('max-h-[360px]', 'object-contain');
-        img.classList.remove('w-full', 'h-auto');
-      }
     };
   </script>
 </body>
