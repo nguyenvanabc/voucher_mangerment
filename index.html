@@ -290,7 +290,17 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      getDocs, 
+      doc, 
+      updateDoc,
+      query,
+      where,
+      orderBy
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDx2SawYElA_HtYlF58K8uJsKF73SEcyWk",
@@ -400,7 +410,7 @@
       });
     }
 
-    // ===== TAB & LOAD =====
+    // ===== TAB & LOAD (ĐÃ TỐI ƯU) =====
     window.switchTab = (tab) => {
       currentTab = tab;
       ['Active', 'Used', 'Expired'].forEach(t => {
@@ -416,39 +426,77 @@
       if (!currentUser) return;
       const container = document.getElementById('voucherContainer');
       container.innerHTML = `<div class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin text-lg"></i> Đang tải...</div>`;
+      
       const today = new Date().toISOString().split('T')[0];
+      
       try {
-        const snapshot = await getDocs(collection(db, "vouchers"));
-        let allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
+        let q;
+        
         if (type === 'active') {
-          loadedVouchers = allData.filter(v => !v.is_used && (v.expiration_date >= today || !v.expiration_date));
+          // Chỉ lấy voucher chưa dùng
+          q = query(
+            collection(db, "vouchers"),
+            where("is_used", "==", false)
+          );
         } else if (type === 'used') {
-          loadedVouchers = allData.filter(v => v.is_used);
+          // Chỉ lấy voucher đã dùng
+          q = query(
+            collection(db, "vouchers"),
+            where("is_used", "==", true)
+          );
         } else {
-          loadedVouchers = allData.filter(v => !v.is_used && v.expiration_date < today);
+          // Hết hạn: chưa dùng
+          q = query(
+            collection(db, "vouchers"),
+            where("is_used", "==", false)
+          );
         }
 
-        // Sắp xếp theo từng tab
-        if (type === 'used') {
-          // Tab Đã dùng: voucher mới dùng nhất lên đầu
-          loadedVouchers.sort((a, b) => {
-            const timeA = a.used_at ? new Date(a.used_at).getTime() : 0;
-            const timeB = b.used_at ? new Date(b.used_at).getTime() : 0;
-            return timeB - timeA;
-          });
-        } else {
-          // Tab Khả dụng + Hết hạn: hết hạn gần nhất lên đầu
-          loadedVouchers.sort((a, b) => {
+        const snapshot = await getDocs(q);
+        let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Lọc thêm theo ngày hết hạn ở client (vì Firestore hạn chế nhiều inequality)
+        if (type === 'active') {
+          data = data.filter(v => !v.expiration_date || v.expiration_date >= today);
+          // Sort hết hạn gần nhất lên đầu
+          data.sort((a, b) => {
             if (!a.expiration_date) return 1;
             if (!b.expiration_date) return -1;
             return new Date(a.expiration_date) - new Date(b.expiration_date);
           });
+        } else if (type === 'expired') {
+          data = data.filter(v => v.expiration_date && v.expiration_date < today);
+          data.sort((a, b) => {
+            if (!a.expiration_date) return 1;
+            if (!b.expiration_date) return -1;
+            return new Date(a.expiration_date) - new Date(b.expiration_date);
+          });
+        } else if (type === 'used') {
+          // Mới dùng nhất lên đầu
+          data.sort((a, b) => {
+            const timeA = a.used_at ? new Date(a.used_at).getTime() : 0;
+            const timeB = b.used_at ? new Date(b.used_at).getTime() : 0;
+            return timeB - timeA;
+          });
         }
 
-        document.getElementById('countActive').innerText = allData.filter(v => !v.is_used && (v.expiration_date >= today || !v.expiration_date)).length;
+        loadedVouchers = data;
+
+        // Cập nhật số lượng khả dụng (query riêng nhẹ)
+        if (type === 'active') {
+          document.getElementById('countActive').innerText = data.length;
+        } else {
+          // Khi đang ở tab khác vẫn cập nhật count active
+          const activeSnap = await getDocs(query(collection(db, "vouchers"), where("is_used", "==", false)));
+          const activeCount = activeSnap.docs
+            .map(d => d.data())
+            .filter(v => !v.expiration_date || v.expiration_date >= today).length;
+          document.getElementById('countActive').innerText = activeCount;
+        }
+
         renderVoucherList(loadedVouchers);
       } catch (err) {
+        console.error(err);
         container.innerHTML = `<p class="text-center text-xs text-red-400 py-4">Lỗi tải dữ liệu: ${err.message}</p>`;
       }
     }
@@ -658,6 +706,7 @@
 
       showLoading("Đang lưu voucher...");
       try {
+        // Kiểm tra trùng (chỉ cần check code + hash trên các voucher chưa dùng + đã dùng gần đây nếu muốn)
         const snapshot = await getDocs(collection(db, "vouchers"));
         const allData = snapshot.docs.map(d => d.data());
         if (allData.some(v => v.code === code) || allData.some(v => v.image_hash === selectedFileHash)) {
@@ -690,19 +739,26 @@
       }
     };
 
-    // ===== SESSION =====
+    // ===== SESSION (ĐÃ TỐI ƯU) =====
     window.startSession = async () => {
       if (!currentUser) return alert("Vui lòng đăng nhập trước!");
       const today = new Date().toISOString().split('T')[0];
+      
       try {
-        const snapshot = await getDocs(collection(db, "vouchers"));
-        const allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        sessionList = allData.filter(v => !v.is_used && (v.expiration_date >= today || !v.expiration_date));
-        
+        // Chỉ lấy voucher chưa dùng
+        const q = query(
+          collection(db, "vouchers"),
+          where("is_used", "==", false)
+        );
+        const snapshot = await getDocs(q);
+        let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Lọc còn hạn
+        sessionList = data.filter(v => !v.expiration_date || v.expiration_date >= today);
+
         if (sessionList.length === 0) return alert("Không có voucher khả dụng để tạo phiên!");
 
-        // Ưu tiên voucher hết hạn gần nhất lên đầu phiên
+        // Ưu tiên hết hạn gần nhất
         sessionList.sort((a, b) => {
           if (!a.expiration_date) return 1;
           if (!b.expiration_date) return -1;
