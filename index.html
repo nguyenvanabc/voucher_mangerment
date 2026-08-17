@@ -433,29 +433,31 @@
 
     // --- PHIÊN SỬ DỤNG ---
     window.startSession = async () => {
-      if (!currentUser) return alert("Vui lòng đăng nhập trước!");
+  if (!currentUser) return alert("Vui lòng đăng nhập trước!");
 
-      const today = new Date().toISOString().split('T')[0];
-      const q = query(collection(db, "vouchers"), where("is_used", "==", false), where("expiration_date", ">=", today));
-      
-      try {
-        const snapshot = await getDocs(q);
-        sessionList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const today = new Date().toISOString().split('T')[0];
+  
+  try {
+    // 1. Lấy toàn bộ danh sách voucher về
+    const snapshot = await getDocs(collection(db, "vouchers"));
+    const allData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (sessionList.length === 0) {
-          alert("Không có voucher khả dụng để tạo phiên!");
-          return;
-        }
+    // 2. Lọc danh sách khả dụng bằng JS (Không dùng query ghép của Firebase)
+    sessionList = allData.filter(v => v.is_used === false && (v.expiration_date >= today || !v.expiration_date));
 
-        sessionCurrentIndex = 0;
-        document.getElementById('sessionTotal').innerText = sessionList.length;
-        renderSessionItem();
-        document.getElementById('modalSession').classList.remove('hidden');
-      } catch (err) {
-        alert("Lỗi: " + err.message);
-      }
-    };
+    if (sessionList.length === 0) {
+      alert("Không có voucher khả dụng để tạo phiên!");
+      return;
+    }
 
+    sessionCurrentIndex = 0;
+    document.getElementById('sessionTotal').innerText = sessionList.length;
+    renderSessionItem();
+    document.getElementById('modalSession').classList.remove('hidden');
+  } catch (err) {
+    alert("Lỗi tạo phiên: " + err.message);
+  }
+};
     function renderSessionItem() {
       if (sessionCurrentIndex >= sessionList.length) {
         alert("Đã duyệt hết voucher trong phiên!");
