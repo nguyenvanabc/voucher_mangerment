@@ -28,14 +28,13 @@
       box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.39);
     }
 
-    /* Session */
     #modalSession {
       touch-action: pan-y;
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
     }
     #sessionCard {
-      transition: transform 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.28s ease;
+      transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease;
       will-change: transform, opacity;
     }
     .swipe-hint {
@@ -45,8 +44,6 @@
       0%, 100% { opacity: 0.5; }
       50% { opacity: 1; }
     }
-
-    /* Toast */
     #toast {
       transition: all 0.3s ease;
     }
@@ -169,7 +166,7 @@
     </div>
   </div>
 
-  <!-- ==================== SESSION MODAL (TỐI ƯU) ==================== -->
+  <!-- ==================== SESSION MODAL ==================== -->
   <div id="modalSession" class="fixed inset-0 bg-slate-950 z-50 hidden flex flex-col text-white select-none">
    
     <!-- Top bar -->
@@ -199,7 +196,7 @@
             <span id="sessionAmountTag" class="text-sm font-extrabold text-emerald-600">-- đ</span>
           </div>
 
-          <!-- IMAGE - Ưu tiên cao nhất -->
+          <!-- IMAGE -->
           <div class="relative bg-slate-900 flex-1 min-h-[320px] sm:min-h-[380px] overflow-hidden flex items-center justify-center cursor-pointer select-none" onclick="toggleZoomImage()">
             <img id="sessionImg" 
                  class="w-full h-full object-contain transition-transform duration-500 ease-out" 
@@ -212,7 +209,7 @@
             </span>
           </div>
 
-          <!-- Dots indicator -->
+          <!-- Dots -->
           <div id="sessionDots" class="flex justify-center gap-1.5 py-2 bg-white"></div>
          
           <!-- Code + Exp -->
@@ -313,14 +310,7 @@
     let base64Image = '';
     let selectedFileHash = '';
     let isZoomedIn = false;
-    let currentZoomInfo = null; // tạm lưu khi upload
-
-    // Swipe state
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchCurrentX = 0;
-    let isSwiping = false;
-    const SWIPE_THRESHOLD = 60;
+    let currentZoomInfo = null;
 
     function formatCurrency(amount) {
       if (!amount) return '0 đ';
@@ -565,7 +555,6 @@
       currentZoomInfo = null;
     };
 
-    // Quét + tính zoom_info khi chọn ảnh
     async function detectZoomInfo(file) {
       try {
         const html5QrCode = new Html5Qrcode("reader");
@@ -611,7 +600,6 @@
         document.getElementById('inputExpDate').value = exp3Months.toISOString().split('T')[0];
         selectedFileHash = CryptoJS.SHA256(base64Image).toString();
 
-        // Quét mã chữ
         const html5QrCode = new Html5Qrcode("reader");
         try {
           const decodedText = await html5QrCode.scanFile(file, true);
@@ -620,9 +608,7 @@
           document.getElementById('inputCode').value = '';
         }
 
-        // Tính zoom_info
         currentZoomInfo = await detectZoomInfo(file);
-
         document.getElementById('btnSaveVoucher').disabled = false;
       } finally {
         hideLoading();
@@ -734,7 +720,7 @@
         return;
       }
 
-      // Fallback: scan lại (cho voucher cũ chưa có zoom_info)
+      // Fallback cho voucher cũ
       try {
         const html5QrCode = new Html5Qrcode("reader");
         const res = await fetch(item.image_url);
@@ -779,13 +765,11 @@
     }
 
     window.toggleZoomImage = () => {
-      if (isSwiping) return;
       const img = document.getElementById('sessionImg');
       if (isZoomedIn) resetZoom(img);
       else applyZoom(img, 50, 50, 2);
     };
 
-    // Copy mã khi nhấn giữ
     window.copyCode = (e) => {
       e.preventDefault();
       const code = document.getElementById('sessionCodeDisplay').innerText;
@@ -794,92 +778,113 @@
       }
     };
 
-    // ===== SWIPE =====
+    // ===== TINDER-STYLE SWIPE =====
     function setupSwipe() {
       const card = document.getElementById('sessionCard');
       const modal = document.getElementById('modalSession');
 
+      let startX = 0;
+      let startY = 0;
+      let currentX = 0;
+      let isDragging = false;
+
       modal.addEventListener('touchstart', (e) => {
         if (sessionList.length <= 1) return;
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchCurrentX = touchStartX;
-        isSwiping = false;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        currentX = startX;
+        isDragging = true;
         card.style.transition = 'none';
       }, { passive: true });
 
       modal.addEventListener('touchmove', (e) => {
-        if (sessionList.length <= 1) return;
-        touchCurrentX = e.touches[0].clientX;
-        const deltaX = touchCurrentX - touchStartX;
-        const deltaY = e.touches[0].clientY - touchStartY;
+        if (!isDragging || sessionList.length <= 1) return;
 
-        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-          isSwiping = true;
-          const limited = Math.max(-120, Math.min(120, deltaX * 0.65));
-          card.style.transform = `translateX(${limited}px) scale(0.97)`;
-          card.style.opacity = `${1 - Math.abs(limited) / 280}`;
-        }
+        currentX = e.touches[0].clientX;
+        const deltaX = currentX - startX;
+        const deltaY = e.touches[0].clientY - startY;
+
+        // Chỉ xử lý kéo ngang
+        if (Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+        const rotate = deltaX * 0.08;
+        const opacity = 1 - Math.min(Math.abs(deltaX) / 300, 0.55);
+
+        card.style.transform = `translateX(${deltaX}px) rotate(${rotate}deg)`;
+        card.style.opacity = opacity;
       }, { passive: true });
 
       modal.addEventListener('touchend', () => {
-        if (sessionList.length <= 1 || !isSwiping) {
-          card.style.transition = 'transform 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.28s ease';
-          card.style.transform = 'translateX(0) scale(1)';
-          card.style.opacity = '1';
-          isSwiping = false;
-          return;
-        }
+        if (!isDragging || sessionList.length <= 1) return;
+        isDragging = false;
 
-        const deltaX = touchCurrentX - touchStartX;
-        card.style.transition = 'transform 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.28s ease';
+        const deltaX = currentX - startX;
+        const threshold = 100;
 
-        if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
-          if (navigator.vibrate) navigator.vibrate(12);
+        card.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease';
 
-          if (deltaX < 0) sessionCurrentIndex++;
-          else sessionCurrentIndex--;
+        if (Math.abs(deltaX) > threshold) {
+          if (navigator.vibrate) navigator.vibrate(18);
 
-          card.style.transform = `translateX(${deltaX < 0 ? -80 : 80}px) scale(0.95)`;
+          const goingNext = deltaX < 0;
+
+          // Bay văng kiểu Tinder
+          const flyX = goingNext ? -window.innerWidth * 1.3 : window.innerWidth * 1.3;
+          const flyRotate = goingNext ? -28 : 28;
+
+          card.style.transform = `translateX(${flyX}px) rotate(${flyRotate}deg)`;
           card.style.opacity = '0';
 
           setTimeout(() => {
+            if (goingNext) sessionCurrentIndex++;
+            else sessionCurrentIndex--;
+
             renderSessionItem();
+
+            // Voucher mới xuất hiện từ phía đối diện
             card.style.transition = 'none';
-            card.style.transform = `translateX(${deltaX < 0 ? 50 : -50}px) scale(0.97)`;
+            card.style.transform = `translateX(${goingNext ? 90 : -90}px) rotate(${goingNext ? 10 : -10}deg)`;
             card.style.opacity = '0';
+
             requestAnimationFrame(() => {
-              card.style.transition = 'transform 0.28s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.28s ease';
-              card.style.transform = 'translateX(0) scale(1)';
+              card.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease';
+              card.style.transform = 'translateX(0) rotate(0deg)';
               card.style.opacity = '1';
             });
-          }, 180);
+          }, 300);
         } else {
-          card.style.transform = 'translateX(0) scale(1)';
+          // Trở về vị trí cũ
+          card.style.transform = 'translateX(0) rotate(0deg)';
           card.style.opacity = '1';
         }
-        isSwiping = false;
       }, { passive: true });
     }
     setupSwipe();
 
     window.sessionSkip = () => {
       if (sessionList.length === 1) return endSession();
+
       const card = document.getElementById('sessionCard');
-      card.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
-      card.style.transform = 'translateX(-60px) scale(0.97)';
+      card.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease';
+      
+      // Bay sang trái kiểu Tinder
+      card.style.transform = `translateX(-${window.innerWidth * 1.2}px) rotate(-26deg)`;
       card.style.opacity = '0';
+
       setTimeout(() => {
         sessionCurrentIndex++;
         renderSessionItem();
+
         card.style.transition = 'none';
-        card.style.transform = 'translateX(40px) scale(0.97)';
+        card.style.transform = 'translateX(80px) rotate(8deg)';
+        card.style.opacity = '0';
+
         requestAnimationFrame(() => {
-          card.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
-          card.style.transform = 'translateX(0) scale(1)';
+          card.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.35s ease';
+          card.style.transform = 'translateX(0) rotate(0deg)';
           card.style.opacity = '1';
         });
-      }, 180);
+      }, 300);
     };
 
     window.sessionRedeem = async () => {
@@ -915,7 +920,7 @@
     window.endSession = () => {
       document.getElementById('modalSession').classList.add('hidden');
       const card = document.getElementById('sessionCard');
-      card.style.transform = 'translateX(0) scale(1)';
+      card.style.transform = 'translateX(0) rotate(0deg)';
       card.style.opacity = '1';
       loadVouchers(currentTab);
     };
