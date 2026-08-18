@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <!-- Thư viện tạo Barcode -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 
   <style>
     body {
@@ -46,6 +48,17 @@
     }
     #toast {
       transition: all 0.3s ease;
+    }
+
+    /* Barcode full width */
+    #barcodeContainer {
+      background: white;
+      padding: 12px 8px 8px;
+    }
+    #barcodeSvg {
+      width: 100% !important;
+      height: auto !important;
+      max-height: 90px;
     }
   </style>
 </head>
@@ -202,7 +215,7 @@
           </div>
 
           <!-- IMAGE -->
-          <div class="relative bg-slate-900 flex-1 min-h-[320px] sm:min-h-[380px] overflow-hidden flex items-center justify-center cursor-pointer select-none" onclick="toggleZoomImage()">
+          <div class="relative bg-slate-900 flex-1 min-h-[260px] sm:min-h-[320px] overflow-hidden flex items-center justify-center cursor-pointer select-none" onclick="toggleZoomImage()">
             <img id="sessionImg" 
                  class="w-full h-full object-contain transition-transform duration-500 ease-out" 
                  src="" 
@@ -217,21 +230,26 @@
           <!-- Dots -->
           <div id="sessionDots" class="flex justify-center gap-1.5 py-2 bg-white"></div>
          
-          <!-- Code + Exp -->
-          <div class="px-4 pb-3 pt-1 space-y-1.5 shrink-0 bg-white">
-            <div class="bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Mã Quét / Thu Ngân</p>
-              <div id="sessionCodeDisplay" 
-                   class="font-mono text-base font-bold text-indigo-600 tracking-wide break-all select-all leading-snug"
-                   oncontextmenu="copyCode(event)">
-              </div>
-              <p class="text-[10px] text-slate-400 mt-1">Nhấn giữ để sao chép</p>
+          <!-- ===== BARCODE + MÃ CHỮ ===== -->
+          <div class="shrink-0 bg-white border-t border-slate-100">
+            <!-- Barcode full width -->
+            <div id="barcodeContainer" class="w-full">
+              <svg id="barcodeSvg" class="w-full"></svg>
             </div>
-            <div class="flex justify-between items-center text-xs text-slate-500 px-1">
-              <span>Hạn dùng:</span>
-              <span id="sessionExpDate" class="font-bold text-red-500">--/--/----</span>
+
+            <!-- Mã chữ -->
+            <div class="px-4 pb-3 pt-1">
+              <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider text-center mb-1">Mã chữ (nhập tay nếu cần)</p>
+              <div id="sessionCodeDisplay" 
+                   class="font-mono text-sm font-bold text-indigo-600 tracking-wide break-all text-center select-all leading-snug">
+              </div>
+              <div class="flex justify-between items-center text-xs text-slate-500 mt-2 px-1">
+                <span>Hạn dùng:</span>
+                <span id="sessionExpDate" class="font-bold text-red-500">--/--/----</span>
+              </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
@@ -298,8 +316,7 @@
       doc, 
       updateDoc,
       query,
-      where,
-      orderBy
+      where
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -410,7 +427,7 @@
       });
     }
 
-    // ===== TAB & LOAD (ĐÃ TỐI ƯU) =====
+    // ===== TAB & LOAD =====
     window.switchTab = (tab) => {
       currentTab = tab;
       ['Active', 'Used', 'Expired'].forEach(t => {
@@ -432,33 +449,17 @@
       try {
         let q;
         
-        if (type === 'active') {
-          // Chỉ lấy voucher chưa dùng
-          q = query(
-            collection(db, "vouchers"),
-            where("is_used", "==", false)
-          );
-        } else if (type === 'used') {
-          // Chỉ lấy voucher đã dùng
-          q = query(
-            collection(db, "vouchers"),
-            where("is_used", "==", true)
-          );
+        if (type === 'active' || type === 'expired') {
+          q = query(collection(db, "vouchers"), where("is_used", "==", false));
         } else {
-          // Hết hạn: chưa dùng
-          q = query(
-            collection(db, "vouchers"),
-            where("is_used", "==", false)
-          );
+          q = query(collection(db, "vouchers"), where("is_used", "==", true));
         }
 
         const snapshot = await getDocs(q);
         let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Lọc thêm theo ngày hết hạn ở client (vì Firestore hạn chế nhiều inequality)
         if (type === 'active') {
           data = data.filter(v => !v.expiration_date || v.expiration_date >= today);
-          // Sort hết hạn gần nhất lên đầu
           data.sort((a, b) => {
             if (!a.expiration_date) return 1;
             if (!b.expiration_date) return -1;
@@ -472,7 +473,6 @@
             return new Date(a.expiration_date) - new Date(b.expiration_date);
           });
         } else if (type === 'used') {
-          // Mới dùng nhất lên đầu
           data.sort((a, b) => {
             const timeA = a.used_at ? new Date(a.used_at).getTime() : 0;
             const timeB = b.used_at ? new Date(b.used_at).getTime() : 0;
@@ -482,11 +482,9 @@
 
         loadedVouchers = data;
 
-        // Cập nhật số lượng khả dụng (query riêng nhẹ)
         if (type === 'active') {
           document.getElementById('countActive').innerText = data.length;
         } else {
-          // Khi đang ở tab khác vẫn cập nhật count active
           const activeSnap = await getDocs(query(collection(db, "vouchers"), where("is_used", "==", false)));
           const activeCount = activeSnap.docs
             .map(d => d.data())
@@ -706,7 +704,6 @@
 
       showLoading("Đang lưu voucher...");
       try {
-        // Kiểm tra trùng (chỉ cần check code + hash trên các voucher chưa dùng + đã dùng gần đây nếu muốn)
         const snapshot = await getDocs(collection(db, "vouchers"));
         const allData = snapshot.docs.map(d => d.data());
         if (allData.some(v => v.code === code) || allData.some(v => v.image_hash === selectedFileHash)) {
@@ -739,26 +736,20 @@
       }
     };
 
-    // ===== SESSION (ĐÃ TỐI ƯU) =====
+    // ===== SESSION =====
     window.startSession = async () => {
       if (!currentUser) return alert("Vui lòng đăng nhập trước!");
       const today = new Date().toISOString().split('T')[0];
       
       try {
-        // Chỉ lấy voucher chưa dùng
-        const q = query(
-          collection(db, "vouchers"),
-          where("is_used", "==", false)
-        );
+        const q = query(collection(db, "vouchers"), where("is_used", "==", false));
         const snapshot = await getDocs(q);
         let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        // Lọc còn hạn
         sessionList = data.filter(v => !v.expiration_date || v.expiration_date >= today);
 
         if (sessionList.length === 0) return alert("Không có voucher khả dụng để tạo phiên!");
 
-        // Ưu tiên hết hạn gần nhất
         sessionList.sort((a, b) => {
           if (!a.expiration_date) return 1;
           if (!b.expiration_date) return -1;
@@ -789,6 +780,29 @@
       ).join('');
     }
 
+    // Tạo barcode
+    function generateBarcode(code) {
+      const svg = document.getElementById('barcodeSvg');
+      if (!code || code === 'KHÔNG CÓ MÃ') {
+        svg.innerHTML = '';
+        return;
+      }
+      try {
+        JsBarcode(svg, code, {
+          format: "CODE128",
+          width: 2.2,
+          height: 70,
+          displayValue: false,   // không hiện chữ trên barcode
+          margin: 8,
+          background: "#ffffff",
+          lineColor: "#000000"
+        });
+      } catch (e) {
+        console.warn("Không tạo được barcode:", e);
+        svg.innerHTML = '';
+      }
+    }
+
     async function renderSessionItem() {
       if (sessionList.length === 0) return endSession();
       if (sessionCurrentIndex >= sessionList.length) sessionCurrentIndex = 0;
@@ -800,6 +814,9 @@
       document.getElementById('sessionExpDate').innerText = item.expiration_date || '--';
       document.getElementById('sessionProviderTag').innerText = item.provider || 'UrBox';
       document.getElementById('sessionAmountTag').innerText = formatCurrency(item.amount);
+
+      // Tạo barcode
+      generateBarcode(item.code || '');
 
       const img = document.getElementById('sessionImg');
       img.src = item.image_url;
@@ -858,14 +875,6 @@
       const img = document.getElementById('sessionImg');
       if (isZoomedIn) resetZoom(img);
       else applyZoom(img, 50, 50, 2);
-    };
-
-    window.copyCode = (e) => {
-      e.preventDefault();
-      const code = document.getElementById('sessionCodeDisplay').innerText;
-      if (code && code !== 'KHÔNG CÓ MÃ') {
-        navigator.clipboard.writeText(code).then(() => showToast("Đã sao chép mã"));
-      }
     };
 
     // ===== TINDER-STYLE SWIPE =====
