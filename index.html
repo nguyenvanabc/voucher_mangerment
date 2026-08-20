@@ -435,10 +435,7 @@
 
         const { data: { text } } = await tesseractWorker.recognize(processed);
         
-        // Hiện raw text để debug
-        rawEl.classList.remove('hidden');
-        rawEl.innerText = 'OCR: ' + (text || '(trống)').replace(/\n/g, ' | ').slice(0, 200);
-
+       
         // 4. Làm sạch & tìm số
         let normalized = text
           .replace(/[oO]/g, '0')
