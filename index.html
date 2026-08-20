@@ -416,10 +416,19 @@
 
         // 2. Lazy load Tesseract
         if (!tesseractWorker) {
-          const Tesseract = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
-          tesseractWorker = await Tesseract.createWorker('eng', 1);
-        }
-
+          // Dùng bản UMD ổn định hơn
+          await new Promise((resolve, reject) => {
+          if (window.Tesseract) return resolve();
+    
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+  
+         tesseractWorker = await window.Tesseract.createWorker('eng');
+       }
         // 3. Cấu hình phù hợp ảnh screenshot (ít chữ)
         await tesseractWorker.setParameters({
           tessedit_pageseg_mode: '6',          // Assume uniform block of text
