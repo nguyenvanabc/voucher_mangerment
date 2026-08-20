@@ -45,6 +45,39 @@
     #toast { transition: all 0.3s ease; }
     #barcodeContainer { background: white; padding: 12px 8px 8px; }
     #barcodeSvg { width: 100% !important; height: auto !important; max-height: 90px; }
+
+    /* Hiệu ứng redeem thành công */
+    #redeemSuccessOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(16, 185, 129, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    #redeemSuccessOverlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #redeemSuccessOverlay .check-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: scale(0.3);
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    #redeemSuccessOverlay.show .check-circle {
+      transform: scale(1);
+    }
   </style>
 </head>
 <body class="pb-24">
@@ -216,7 +249,16 @@
     </div>
 
     <div class="flex-1 flex flex-col justify-center w-full overflow-hidden relative">
-      <div id="sessionCard" class="w-full h-full flex flex-col">
+      <div id="sessionCard" class="w-full h-full flex flex-col relative">
+        
+        <!-- Overlay thành công khi redeem -->
+        <div id="redeemSuccessOverlay">
+          <div class="check-circle">
+            <i class="fa-solid fa-check text-4xl text-emerald-500"></i>
+          </div>
+          <p class="mt-4 text-white font-bold text-lg">Đã sử dụng!</p>
+        </div>
+
         <div class="bg-white text-slate-800 rounded-none sm:rounded-3xl mx-0 sm:mx-3 my-auto shadow-2xl flex flex-col max-h-[82vh] overflow-hidden">
           <div class="flex justify-between items-center px-4 py-2.5 border-b border-slate-100 shrink-0">
             <span id="sessionProviderTag" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">--</span>
@@ -335,6 +377,7 @@
     let sessionRedeemedAmount = 0;
     let cleanOldCandidates = [];
     let tesseractWorker = null;
+    let sessionLocation = null; // Location chỉ lấy 1 lần / phiên
 
     function formatCurrency(amount) {
       if (!amount) return '0 đ';
@@ -358,6 +401,21 @@
 
     function updateRedeemedAmountDisplay() {
       document.getElementById('sessionRedeemedAmount').innerText = `Đã dùng: ${formatCurrency(sessionRedeemedAmount)}`;
+    }
+
+    // Hiệu ứng redeem thành công
+    function playRedeemSuccessAnimation() {
+      return new Promise((resolve) => {
+        const overlay = document.getElementById('redeemSuccessOverlay');
+        overlay.classList.add('show');
+        
+        if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+        setTimeout(() => {
+          overlay.classList.remove('show');
+          resolve();
+        }, 900);
+      });
     }
 
     window.autoSelectProvider = () => {
@@ -397,7 +455,7 @@
       });
     }
 
-    // ===== LOAD TESSERACT (UMD - ổn định) =====
+    // ===== LOAD TESSERACT =====
     async function loadTesseract() {
       if (window.Tesseract) return window.Tesseract;
       
@@ -504,7 +562,7 @@
       }
     });
 
-    // ===== LOCATION =====
+    // ===== LOCATION (chỉ lấy 1 lần / phiên) =====
     function getCurrentLocation() {
       return new Promise((resolve) => {
         if (!navigator.geolocation) {
@@ -724,15 +782,22 @@
     };
     window.closeDetailModal = () => document.getElementById('modalDetail').classList.add('hidden');
 
-    window.openSingleUseModal = (id) => {
+    window.openSingleUseModal = async (id) => {
       const target = loadedVouchers.find(v => v.id === id);
       if (!target) return;
       sessionList = [target];
       sessionCurrentIndex = 0;
       sessionRedeemedAmount = 0;
+      sessionLocation = null;
       updateRedeemedAmountDisplay();
       document.getElementById('sessionTotal').innerText = 1;
       document.getElementById('swipeHint').classList.add('hidden');
+      
+      // Lấy location 1 lần
+      showLoading("Đang lấy vị trí...");
+      sessionLocation = await getCurrentLocation();
+      hideLoading();
+
       renderSessionItem();
       document.getElementById('modalSession').classList.remove('hidden');
     };
@@ -843,7 +908,6 @@
         document.getElementById('inputExpDate').value = exp3Months.toISOString().split('T')[0];
         selectedFileHash = CryptoJS.SHA256(base64Image).toString();
 
-        // 1. Quét mã
         const html5QrCode = new Html5Qrcode("reader");
         try {
           const decodedText = await html5QrCode.scanFile(file, true);
@@ -852,10 +916,8 @@
           document.getElementById('inputCode').value = '';
         }
 
-        // 2. Tự chọn nhà cung cấp
         autoSelectProvider();
 
-        // 3. OCR lấy số tiền
         showLoading("Đang nhận diện mệnh giá...");
         const amount = await extractAmountFromImage(base64Image);
         
@@ -876,7 +938,6 @@
           }
         }
 
-        // 4. Zoom info
         currentZoomInfo = await detectZoomInfo(file);
         document.getElementById('btnSaveVoucher').disabled = false;
       } finally {
@@ -956,7 +1017,14 @@
 
         sessionCurrentIndex = 0;
         sessionRedeemedAmount = 0;
+        sessionLocation = null;
         updateRedeemedAmountDisplay();
+
+        // Lấy location 1 lần duy nhất khi bắt đầu phiên
+        showLoading("Đang lấy vị trí...");
+        sessionLocation = await getCurrentLocation();
+        hideLoading();
+
         document.getElementById('sessionTotal').innerText = sessionList.length;
         document.getElementById('swipeHint').classList.toggle('hidden', sessionList.length <= 1);
         renderSessionItem();
@@ -1157,20 +1225,29 @@
 
     window.sessionRedeem = async () => {
       const item = sessionList[sessionCurrentIndex];
-      showLoading("Đang lấy vị trí & giải mã địa chỉ...");
+      
       try {
-        const location = await getCurrentLocation();
+        // Dùng location đã lấy sẵn (không lấy lại)
+        const location = sessionLocation || "Không xác định";
+
         await updateDoc(doc(db, "vouchers", item.id), {
           is_used: true,
           used_at: new Date().toISOString(),
           used_location: location
         });
+
         sessionRedeemedAmount += (item.amount || 0);
         updateRedeemedAmountDisplay();
+
+        // Animation thành công rõ ràng
+        await playRedeemSuccessAnimation();
+
         sessionList.splice(sessionCurrentIndex, 1);
         document.getElementById('sessionTotal').innerText = sessionList.length;
         document.getElementById('swipeHint').classList.toggle('hidden', sessionList.length <= 1);
+
         showToast("Đã sử dụng voucher");
+
         if (sessionList.length === 0) {
           endSession();
         } else {
@@ -1179,8 +1256,6 @@
         }
       } catch (err) {
         alert("Lỗi khi đánh dấu sử dụng: " + err.message);
-      } finally {
-        hideLoading();
       }
     };
 
@@ -1189,6 +1264,7 @@
       const card = document.getElementById('sessionCard');
       card.style.transform = 'translateX(0) rotate(0deg)';
       card.style.opacity = '1';
+      sessionLocation = null; // Reset location khi kết thúc phiên
       loadVouchers(currentTab);
     };
   </script>
